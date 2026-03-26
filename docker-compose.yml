@@ -1,0 +1,70 @@
+# OS-APOW Development Environment
+# Docker Compose for local development
+
+services:
+  sentinel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: os-apow-sentinel
+    restart: unless-stopped
+    environment:
+      - GITHUB_REPO=${GITHUB_REPO}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - SENTINEL_ID=sentinel-local
+      - SENTINEL_BOT_LOGIN=${SENTINEL_BOT_LOGIN:-}
+      - POLL_INTERVAL=60
+      - SENTINEL_HEARTBEAT_INTERVAL=300
+      - SUBPROCESS_TIMEOUT=5700
+    volumes:
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
+      - sentinel-logs:/var/log/sentinel
+    networks:
+      - os-apow-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  notifier:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: os-apow-notifier
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_REPO=${GITHUB_REPO}
+    volumes:
+      - ./src:/app/src:ro
+    networks:
+      - os-apow-network
+    command: ["python", "-m", "src.notifier_service"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+networks:
+  os-apow-network:
+    driver: bridge
+    internal: false  # Allow internet access for package fetching
+
+volumes:
+  sentinel-logs:
+    driver: local
